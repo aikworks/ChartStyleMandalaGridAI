@@ -817,10 +817,9 @@ export default function MandalaApp() {
     const handleGenerateImage = async () => {
         if (!printRef.current || isImageGenerating) return;
         setIsImageGenerating(true);
-        // 確実にレンダリングを待つ
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // レンダリング待ち
+        await new Promise(resolve => setTimeout(resolve, 300));
 
-        // スタイルを保存（復元用）
         const originalStyle = {
             position: printRef.current.style.position,
             top: printRef.current.style.top,
@@ -828,17 +827,24 @@ export default function MandalaApp() {
             width: printRef.current.style.width,
             height: printRef.current.style.height,
             zIndex: printRef.current.style.zIndex,
+            opacity: printRef.current.style.opacity,
+            visibility: printRef.current.style.visibility,
         };
 
         try {
-            // html2canvas用に一時的に表示（画面外ではなく最前面に配置して確実にキャプチャさせる）
+            // 最前面に表示してキャプチャする（画面一瞬隠れるが確実）
             printRef.current.style.position = 'fixed';
             printRef.current.style.top = '0';
             printRef.current.style.left = '0';
             printRef.current.style.width = '1200px';
-            printRef.current.style.height = 'auto'; // 高さは自動
-            printRef.current.style.zIndex = '-1000'; // 背面に
+            printRef.current.style.height = 'auto';
+            printRef.current.style.zIndex = '10000'; // 最前面
+            printRef.current.style.opacity = '1';
             printRef.current.style.visibility = 'visible';
+            printRef.current.style.backgroundColor = 'white'; // 背景色確保
+
+            // 少し待ってからキャプチャ
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             const html2canvas = await loadHtml2Canvas();
             const canvas = await html2canvas(printRef.current, {
@@ -851,7 +857,7 @@ export default function MandalaApp() {
 
             canvas.toBlob((blob) => {
                 if (!blob) {
-                    showToast("画像の生成に失敗しました", "error");
+                    showToast("画像の生成に失敗しました（Blobエラー）", "error");
                     setIsImageGenerating(false);
                     return;
                 }
@@ -863,7 +869,7 @@ export default function MandalaApp() {
 
         } catch (error) {
             console.error("Image generation failed:", error);
-            showToast("画像の生成中にエラーが発生しました", "error");
+            showToast(`画像の生成エラー: ${error.message}`, "error");
             setIsImageGenerating(false);
         } finally {
             // スタイル復元
@@ -874,7 +880,8 @@ export default function MandalaApp() {
                 printRef.current.style.width = originalStyle.width;
                 printRef.current.style.height = originalStyle.height;
                 printRef.current.style.zIndex = originalStyle.zIndex;
-                printRef.current.style.visibility = 'hidden';
+                printRef.current.style.opacity = originalStyle.opacity;
+                printRef.current.style.visibility = originalStyle.visibility;
             }
         }
     };
@@ -887,8 +894,52 @@ export default function MandalaApp() {
     };
 
     const handlePrint = () => {
-        // ブラウザ標準の印刷機能を呼び出す
-        window.print();
+        if (!printRef.current) return;
+        showToast("印刷プレビューを準備中...", "success");
+
+        // 印刷用コンテンツを取得（現在のDOMの状態）
+        const printContent = printRef.current.innerHTML;
+
+        // 新しいウィンドウを開く
+        const printWindow = window.open('', '_blank', 'width=1000,height=1200');
+        if (!printWindow) {
+            showToast("ポップアップがブロックされました。設定を確認してください。", "error");
+            return;
+        }
+
+        // 印刷用HTMLの書き込み
+        // Tailwind CSSをCDNから読み込んでスタイルを適用する
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Mandala Grid Print</title>
+                    <script src="https://cdn.tailwindcss.com"></script>
+                    <style>
+                        @media print {
+                            body { -webkit-print-color-adjust: exact; }
+                        }
+                        body { background: white; }
+                    </style>
+                </head>
+                <body>
+                    <div class="p-8 flex justify-center items-center min-h-screen">
+                        <!-- 親のスタイルも適用するためラップする -->
+                        <div style="width: 100%; max-width: 1000px;">
+                            ${printContent}
+                        </div>
+                    </div>
+                </body>
+                <script>
+                    // スタイル読み込み待ち
+                    setTimeout(() => {
+                        window.print();
+                        // 印刷ダイアログを閉じたらウィンドウも閉じる（ユーザー体験次第だが残しても良い）
+                        // window.close(); 
+                    }, 1000);
+                </script>
+            </html>
+        `);
+        printWindow.document.close();
     };
 
     const getCellColorClass = (index) => {

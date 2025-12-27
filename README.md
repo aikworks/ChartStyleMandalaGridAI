@@ -1,4 +1,4 @@
-# Mandala Chart AI App - Vercelデプロイガイド
+# Chart-style Mandala Grid AI - Vercelデプロイガイド
 
 このアプリは **Vercel** にデプロイすることで、Google Gemini API を安全に利用できるように設計されています。
 

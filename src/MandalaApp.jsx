@@ -817,17 +817,28 @@ export default function MandalaApp() {
     const handleGenerateImage = async () => {
         if (!printRef.current || isImageGenerating) return;
         setIsImageGenerating(true);
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 確実にレンダリングを待つ
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // スタイルを保存（復元用）
+        const originalStyle = {
+            position: printRef.current.style.position,
+            top: printRef.current.style.top,
+            left: printRef.current.style.left,
+            width: printRef.current.style.width,
+            height: printRef.current.style.height,
+            zIndex: printRef.current.style.zIndex,
+        };
+
         try {
-            if (printRef.current) {
-                printRef.current.style.position = 'fixed';
-                printRef.current.style.top = '0';
-                printRef.current.style.left = '0';
-                printRef.current.style.zIndex = '9999';
-                printRef.current.style.opacity = '1';
-                printRef.current.style.visibility = 'visible';
-                window.scrollTo(0, 0);
-            }
+            // html2canvas用に一時的に表示（画面外ではなく最前面に配置して確実にキャプチャさせる）
+            printRef.current.style.position = 'fixed';
+            printRef.current.style.top = '0';
+            printRef.current.style.left = '0';
+            printRef.current.style.width = '1200px';
+            printRef.current.style.height = 'auto'; // 高さは自動
+            printRef.current.style.zIndex = '-1000'; // 背面に
+            printRef.current.style.visibility = 'visible';
 
             const html2canvas = await loadHtml2Canvas();
             const canvas = await html2canvas(printRef.current, {
@@ -835,37 +846,36 @@ export default function MandalaApp() {
                 backgroundColor: "#ffffff",
                 logging: false,
                 useCORS: true,
-                scrollX: 0,
-                scrollY: 0,
                 windowWidth: 1200,
-                windowHeight: 1350
             });
 
-            if (printRef.current) {
-                printRef.current.style.position = 'fixed';
-                printRef.current.style.top = '0';
-                printRef.current.style.left = '0';
-                printRef.current.style.zIndex = '-50';
-                printRef.current.style.opacity = '0';
-                printRef.current.style.visibility = 'hidden';
-            }
-
             canvas.toBlob((blob) => {
-                if (!blob) { showToast("生成失敗", "error"); setIsImageGenerating(false); return; }
+                if (!blob) {
+                    showToast("画像の生成に失敗しました", "error");
+                    setIsImageGenerating(false);
+                    return;
+                }
                 const dataUrl = URL.createObjectURL(blob);
                 setGeneratedImageData(dataUrl);
                 setShowImageModal(true);
                 setIsImageGenerating(false);
             }, 'image/png');
+
         } catch (error) {
-            console.error(error);
+            console.error("Image generation failed:", error);
+            showToast("画像の生成中にエラーが発生しました", "error");
+            setIsImageGenerating(false);
+        } finally {
+            // スタイル復元
             if (printRef.current) {
-                printRef.current.style.zIndex = '-50';
-                printRef.current.style.opacity = '0';
+                printRef.current.style.position = originalStyle.position;
+                printRef.current.style.top = originalStyle.top;
+                printRef.current.style.left = originalStyle.left;
+                printRef.current.style.width = originalStyle.width;
+                printRef.current.style.height = originalStyle.height;
+                printRef.current.style.zIndex = originalStyle.zIndex;
                 printRef.current.style.visibility = 'hidden';
             }
-            showToast("生成失敗", "error");
-            setIsImageGenerating(false);
         }
     };
 
@@ -877,13 +887,8 @@ export default function MandalaApp() {
     };
 
     const handlePrint = () => {
-        showToast("印刷画面を開いています...", "success");
-        if (!printRef.current) return;
-        const printContent = printRef.current.innerHTML;
-        const printWindow = window.open('', '_blank', 'width=800,height=900');
-        if (!printWindow) { showToast("ポップアップがブロックされました", "error"); return; }
-        printWindow.document.write(`<html><head><title>Print</title><script src="https://cdn.tailwindcss.com"></script></head><body><div class="p-8">${printContent}</div><script>window.onload=()=>{window.print();window.close();}</script></body></html>`);
-        printWindow.document.close();
+        // ブラウザ標準の印刷機能を呼び出す
+        window.print();
     };
 
     const getCellColorClass = (index) => {
@@ -1144,6 +1149,9 @@ ${contextText}を達成するための8つの具体的な行動（ToDo）を日�
                         <button onClick={() => setShowTextModal(true)} className="py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors shadow-sm"><FileText className="w-5 h-5" />テキスト出力</button>
                     </div>
                 </div>
+
+                <div className="text-center text-slate-400 text-xs py-4 mt-8 font-mono no-print">Copyright &copy; 株式会社AI顧問ワークス feat. 生成AI共創道場 2025-2026</div>
+
             </main>
 
             {/* 画像保存用 (修正: fixed + visibility制御) */}
